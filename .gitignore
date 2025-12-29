@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Spark/Hadoop
+spark-warehouse/
+metastore_db/
+derby.log
+checkpoint/
+
+# IDE
+.vscode/
+.idea/
+
+# Data & Dependencies (Rất quan trọng)
+deps/*.jar
+sftp_data/
+mongo_data/
+postgres_data/
+minio_data/
+/tmp/
+
+# Metadata (Nếu bạn muốn bảo mật thông tin kết nối)
+configs/*.json
