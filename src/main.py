@@ -16,13 +16,17 @@ def main():
         print(f"Warning: Storage init failed: {e}")
 
     config = load_config(args.config)
-
-    spark = get_spark_session(config.get("job_name", "IngestionJob"))
+    job_name = config.get("job_name", "IngestionJob")
+    spark = get_spark_session(job_name)
 
     try:
         connector = ConnectorFactory.get_connector(spark, config)
         df = connector.read()
-        connector.write(df)
+        
+        target_conf = config.get("target", {})
+        primary_key = target_conf.get("primary_key")
+        
+        connector.write(df, primary_key=primary_key)
         
         print("-> Job Finished Successfully!")
     except Exception as e:

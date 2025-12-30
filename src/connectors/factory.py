@@ -10,7 +10,6 @@ class ConnectorFactory:
 
     @classmethod
     def _load_connectors(cls):
-        """Tự động quét và import toàn bộ file trong thư mục connectors"""
         if cls._loaded:
             return
         

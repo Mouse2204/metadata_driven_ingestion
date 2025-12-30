@@ -14,7 +14,7 @@ checkpoint/
 # IDE
 .vscode/
 .idea/
-
+logs/
 # Data & Dependencies (Rất quan trọng)
 deps/*.jar
 sftp_data/
@@ -24,4 +24,4 @@ minio_data/
 /tmp/
 
 # Metadata (Nếu bạn muốn bảo mật thông tin kết nối)
-configs/*.json
+#configs/*.json

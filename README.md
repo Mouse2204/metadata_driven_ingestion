@@ -6,7 +6,9 @@ Bản Demo thứ 3:
 - Factory and Registry Pattern: Tự động phát hiện và đăng ký các Connector(Hiện tại là Mongo, File CSV, Database PostgreSQL) thông qua Decorators, loại bỏ hoàn toàn các khối lệnh if/else.
 - Metadata Driven: Toàn bộ quy trình nạp dữ liệu (Nguồn, đích, định dạng, phân vùng) được điều khiển thông qua file cấu hình JSON.
 - Đa dạng kết nối: Hỗ trợ nạp dữ liệu từ SQL(PostgreSQL), NoSQL(MongoDB), và FIles (SFTP/CSV/Excel).
-- Xử lý Lazy Evaluation: Tối ưu hóa việc tải file tạm từ SFTP để Spark có thể đọc dữ liệu ổn định.
+- Chống trùng lặp dữ liệu (Idempotency): Tích hợp logic Delta Lake Merge (Upsert) và dropDuplicates tại nguồn để đảm bảo dữ liệu trong kho luôn duy nhất ngay cả khi nạp lại nhiều lần.
+- Tự động hóa thông minh: Tích hợp Airflow DAGs tự động sinh theo cấu hình, hỗ trợ chạy lệch giờ (Staggered Scheduling) để tối ưu hóa tài nguyên RAM.
+- Xử lý Offline: Sử dụng bộ thư viện JAR nội bộ giúp hệ thống khởi động Spark cực nhanh và không phụ thuộc vào Internet.
 
 #Kiến trúc hệ thống:
 1.JobRunner(main.py): Đóng vai trò điều phối, khởi tạo Spark và thực thi Job.
@@ -26,7 +28,14 @@ data-ingestion-framework/
 │   ├── utils/             # Các tiện ích (Spark khởi tạo, Storage init,...)
 │   └── main.py            # Điểm khởi đầu của ứng dụng (Entrypoint)
 ├── deps/                  # Chứa các thư viện JAR cho Spark (.jar)
+├──                        # Script tạo dữ liệu giả và kiểm tra (check.py)
 └── docker-compose.yml     # Thiết lập hạ tầng (Spark, MinIO, Postgres, Mongo, SFTP)
+
+#Airflow - Tự động hóa với Airflow:
+- Hệ thống tự động quét thư mục configs/ để sinh ra các DAG tương ứng.
+- Lịch trình: Các Job được cấu hình chạy lệch giờ (phút 00, 20, 40) để tránh quá tải RAM.
+- Giới hạn tài nguyên: Mỗi Job Spark được giới hạn --driver-memory 512m để đảm bảo tính ổn định.
+- Validation: Sau mỗi lần nạp, task validate_data_count tự động kiểm tra số lượng bản ghi và hiển thị dữ liệu mẫu trong Log.
 
 #Quy trình hệ thống:
 1. Khởi tạo:

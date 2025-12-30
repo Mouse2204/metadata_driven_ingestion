@@ -13,6 +13,11 @@ services:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
   # --- MONGODB ---
   mongo_db:
     image: mongo:6.0
@@ -62,6 +67,8 @@ services:
   ingestion_app:
     build: .
     container_name: my_ingestion_app
+    tty: true
+    stdin_open: true
     depends_on:
       - postgres_db
       - minio
@@ -69,12 +76,78 @@ services:
     volumes:
       - ./configs:/app/configs
       - ./src:/app/src
+      - ./tests:/app/tests
+      - ./deps:/app/deps
     environment:
       - DB_PASSWORD=mysecretpassword
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
       - S3_ENDPOINT=http://minio:9000
+    command: tail -f /dev/null
 
+  airflow-webserver:
+    user: "0:0"
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    restart: always
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:mysecretpassword@postgres_db:5432/airflow_db
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./configs:/opt/airflow/configs
+      - ./logs:/opt/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8085:8080"
+    command: webserver
+
+  airflow-scheduler:
+    user: "0:0"
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: airflow_scheduler
+    restart: always
+    depends_on:
+      - airflow-webserver
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:mysecretpassword@postgres_db:5432/airflow_db
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./configs:/opt/airflow/configs
+      - ./logs:/opt/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: scheduler
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: airflow_init
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://postgres:mysecretpassword@postgres_db:5432/airflow_db
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db init &&
+        airflow users create \
+          --username admin \
+          --firstname admin \
+          --lastname admin \
+          --role Admin \
+          --email admin@example.com \
+          --password admin
 volumes:
   pg_data:
   minio_data:

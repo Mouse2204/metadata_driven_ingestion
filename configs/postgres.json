@@ -1,0 +1,19 @@
+{
+  "job_name": "ingest_users_postgres",
+  "source_type": "postgres",
+  "source_config": {
+    "url": "jdbc:postgresql://postgres_db:5432/postgres",
+    "dbtable": "public.test_users",
+    "user": "postgres",
+    "password": "${DB_PASSWORD}"
+  },
+  "target": {
+    "format": "delta",
+    "path": "s3a://raw-data/users_delta_table",
+    "primary_key": "id",
+    "transformations": [
+      { "type": "cast_type", "columns": ["id"], "data_type": "string" },
+      { "type": "add_ingestion_timestamp" }
+    ]
+  }
+}

@@ -1,4 +1,5 @@
 from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
 from src.connectors.base import BaseConnector
 from src.connectors.factory import ConnectorFactory
 
@@ -17,4 +18,9 @@ class MongoConnector(BaseConnector):
             .option("collection", collection) \
             .load()
         
+        if df.isEmpty():
+            print(f"-> Warning: Collection {collection} is empty. Schema might be incomplete.")
+        else:
+            print(f"-> Source columns detected: {df.columns}")
+
         return df
