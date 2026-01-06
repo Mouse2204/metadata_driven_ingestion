@@ -1,0 +1,30 @@
+{
+  "job_name": "Wiki_Ingest_Job",
+  "source_type": "api",
+  "source_config": {
+    "url": "https://en.wikipedia.org/w/api.php",
+    "method": "GET",
+    "headers": {
+      "User-Agent": "DataIngestionBot/1.0 (admin@example.com)"
+    },
+    "params": {
+      "action": "query",
+      "format": "json",
+      "list": "search",
+      "srsearch": "Data Engineering",
+      "srlimit": "100"
+    },
+    "data_path": "query.search"
+  },
+  "target": {
+    "format": "delta",
+    "mode": "append",
+    "path": "s3a://raw-data/wikipedia_search",
+    "primary_key": "pageid",
+    "transformations": [
+      {
+        "type": "add_ingestion_timestamp"
+      }
+    ]
+  }
+}

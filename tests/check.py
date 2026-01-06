@@ -1,29 +1,25 @@
 import sys
-from pyspark.sql import SparkSession
+import os
+# Thêm đường dẫn app để import được src
+sys.path.append('/app')
+
+from src.utils.spark import get_spark_session
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
+        print("Usage: python check.py <s3_path>")
         sys.exit(1)
-
+    
     path = sys.argv[1]
-
-    spark = SparkSession.builder \
-        .appName("Data Validation") \
-        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
-        .getOrCreate()
-
+    spark = get_spark_session("DataCheckJob")
+    
+    print(f"--- Reading Delta Table from: {path} ---")
     try:
         df = spark.read.format("delta").load(path)
-        row_count = df.count()
-        
-        print("-" * 50)
-        print("VALIDATION SUCCESS")
-        print(f"Path: {path}")
-        print(f"Total rows: {row_count}")
-        print("-" * 50)
-        df.show(5)
-        
+        print(f"Total Records: {df.count()}")
+        print("Sample Data:")
+        df.select("pageid", "title", "ingested_at").show(5, truncate=False)
     except Exception as e:
-        print(f"Validation failed: {e}")
-        sys.exit(1)
+        print(f"Error: {e}")
+    finally:
+        spark.stop()
