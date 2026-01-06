@@ -13,10 +13,12 @@ def create_dag(dag_id, config_filename):
         "retries": 1,
         "retry_delay": timedelta(minutes=5),
     }
+    
     schedule_mapping = {
         "mongo_logs.json": "0 * * * *",
         "postgres.json": "20 * * * *",
         "sftp.json": "40 * * * *",
+        "WikiAPI.json": "@daily"
     }
 
     schedule = schedule_mapping.get(config_filename, "@daily")
@@ -26,6 +28,7 @@ def create_dag(dag_id, config_filename):
         default_args=default_args,
         schedule_interval=schedule,
         catchup=False,
+        max_active_runs=1,
         tags=["metadata-driven"]
     )
 
@@ -33,8 +36,10 @@ def create_dag(dag_id, config_filename):
         path_mapping = {
             "mongo_logs.json": "mongo_orders",
             "sftp.json": "sftp_csv_data",
-            "postgres.json": "users_delta_table"
+            "postgres.json": "users_delta_table",
+            "WikiAPI.json": "wikipedia_search"
         }
+        
         folder_name = path_mapping.get(config_filename, config_filename.replace(".json", ""))
         target_path = f"s3a://raw-data/{folder_name}"
 
@@ -49,21 +54,7 @@ def create_dag(dag_id, config_filename):
         validate_task = BashOperator(
             task_id="validate_data_count",
             bash_command=(
-                f"docker exec my_ingestion_app spark-submit "
-                f"--driver-memory 512m "
-                f"--executor-memory 512m " 
-                f"--jars /app/deps/delta-spark_2.12-3.0.0.jar,"
-                f"/app/deps/delta-storage-3.0.0.jar,"
-                f"/app/deps/hadoop-aws-3.3.4.jar,"
-                f"/app/deps/aws-java-sdk-bundle-1.12.262.jar "
-                f"--conf spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension "
-                f"--conf spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog "
-                f"--conf spark.hadoop.fs.s3a.endpoint=http://minio:9000 "
-                f"--conf spark.hadoop.fs.s3a.access.key=minioadmin "
-                f"--conf spark.hadoop.fs.s3a.secret.key=minioadmin "
-                f"--conf spark.hadoop.fs.s3a.path.style.access=true "
-                f"--conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem "
-                f"/app/tests/check.py {target_path}"
+                f"docker exec my_ingestion_app python -m tests.check {target_path}"
             )
         )
 

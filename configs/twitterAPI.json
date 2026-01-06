@@ -1,0 +1,32 @@
+{
+  "job_name": "Twitter_Cursor_Ingest",
+  "source_type": "api",
+  "source_config": {
+    "url": "https://api.twitter.com/2/tweets/search/recent",
+    "method": "GET",
+    "headers": {
+      "Authorization": "Bearer ${TWITTER_TOKEN}"
+    },
+    "params": {
+      "query": "DataEngineering",
+      "max_results": 100
+    },
+    "data_path": "data",
+    "pagination": {
+      "strategy": "cursor",
+      "cursor_param": "next_token",
+      "cursor_path": "meta.next_token",
+      "max_pages": 50,
+      "sleep_time": 1
+    }
+  },
+  "target": {
+    "format": "delta",
+    "mode": "append",
+    "path": "s3a://raw-data/tweets",
+    "primary_key": "id",
+    "transformations": [
+      { "type": "add_ingestion_timestamp" }
+    ]
+  }
+}

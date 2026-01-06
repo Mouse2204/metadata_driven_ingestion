@@ -1,30 +1,35 @@
 {
-  "job_name": "Wiki_Ingest_Job",
+  "job_name": "Wiki_Cursor_Incremental",
   "source_type": "api",
   "source_config": {
     "url": "https://en.wikipedia.org/w/api.php",
     "method": "GET",
     "headers": {
-      "User-Agent": "DataIngestionBot/1.0 (admin@example.com)"
+      "User-Agent": "MyDataPipeline/1.0 (contact@example.com)"
     },
     "params": {
       "action": "query",
       "format": "json",
       "list": "search",
       "srsearch": "Data Engineering",
-      "srlimit": "100"
+      "srlimit": "50"
     },
-    "data_path": "query.search"
+    "data_path": "query.search",
+    "pagination": {
+      "strategy": "cursor",
+      "cursor_param": "continue",
+      "cursor_path": "continue",
+      "max_pages": 5,
+      "sleep_time": 1
+    }
   },
   "target": {
     "format": "delta",
-    "mode": "append",
+    "mode": "append", 
     "path": "s3a://raw-data/wikipedia_search",
     "primary_key": "pageid",
     "transformations": [
-      {
-        "type": "add_ingestion_timestamp"
-      }
+      { "type": "add_ingestion_timestamp" }
     ]
   }
 }
