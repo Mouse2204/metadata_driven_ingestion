@@ -1,19 +1,38 @@
 {
-  "job_name": "ingest_users_postgres",
+  "job_name": "postgres_users_optimized",
   "source_type": "postgres",
+  "ingestion_type": "incremental",
+  "incremental_column": "id",
+  "last_ingestion_value": "0",
+  "batch_size": 50000,
+  "ingestion_status": "active",
   "source_config": {
     "url": "jdbc:postgresql://postgres_db:5432/postgres",
     "dbtable": "public.test_users",
     "user": "postgres",
-    "password": "${DB_PASSWORD}"
+    "password": "${DB_PASSWORD}",
+    "driver": "org.postgresql.Driver",
+    "partition_column": "id",
+    "lower_bound": "0",
+    "upper_bound": "1000000",
+    "num_partitions": "4"
   },
   "target": {
     "format": "delta",
     "path": "s3a://raw-data/users_delta_table",
     "primary_key": "id",
+    "schema_evolution": "merge",
     "transformations": [
       { "type": "cast_type", "columns": ["id"], "data_type": "string" },
       { "type": "add_ingestion_timestamp" }
     ]
+  },
+  "dag_params": {
+    "schedule_interval": "20 * * * *",
+    "owner": "data_engine",
+    "retries": 1,
+    "retry_delay_min": 5,
+    "start_date": "2025-01-01",
+    "catchup": false
   }
 }

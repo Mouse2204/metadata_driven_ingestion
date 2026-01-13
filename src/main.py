@@ -4,6 +4,8 @@ from src.connectors.factory import ConnectorFactory
 from src.utils.config_loader import load_config
 from src.utils.MinIOBucket import init_minio_buckets
 from src.utils.spark import get_spark_session
+from src.utils.logging import get_logger
+logger = get_logger("MainApp")
 
 def main():
     parser = argparse.ArgumentParser()

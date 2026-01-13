@@ -1,26 +1,21 @@
 {
-  "job_name": "Wiki_Cursor_Incremental",
+  "job_name": "wiki_api_optimized",
   "source_type": "api",
+  "ingestion_type": "full",
+  "batch_size": 50,
+  "ingestion_status": "active",
   "source_config": {
     "url": "https://en.wikipedia.org/w/api.php",
     "method": "GET",
-    "headers": {
-      "User-Agent": "MyDataPipeline/1.0 (contact@example.com)"
-    },
+    "headers": { "User-Agent": "MyDataPipeline/1.0" },
     "params": {
-      "action": "query",
-      "format": "json",
-      "list": "search",
-      "srsearch": "Data Engineering",
-      "srlimit": "50"
+      "action": "query", "format": "json", "list": "search", 
+      "srsearch": "Data Engineering", "srlimit": "50"
     },
     "data_path": "query.search",
     "pagination": {
-      "strategy": "cursor",
-      "cursor_param": "continue",
-      "cursor_path": "continue",
-      "max_pages": 5,
-      "sleep_time": 1
+      "strategy": "cursor", "cursor_param": "continue", "cursor_path": "continue",
+      "max_pages": 5, "sleep_time": 1
     }
   },
   "target": {
@@ -28,8 +23,17 @@
     "mode": "append", 
     "path": "s3a://raw-data/wikipedia_search",
     "primary_key": "pageid",
+    "schema_evolution": "merge",
     "transformations": [
       { "type": "add_ingestion_timestamp" }
     ]
+  },
+  "dag_params": {
+    "schedule_interval": "@daily",
+    "owner": "data_engine",
+    "retries": 1,
+    "retry_delay_min": 5,
+    "start_date": "2025-01-01",
+    "catchup": false
   }
 }

@@ -1,6 +1,5 @@
 import sys
 import os
-# Thêm đường dẫn app để import được src
 sys.path.append('/app')
 
 from src.utils.spark import get_spark_session

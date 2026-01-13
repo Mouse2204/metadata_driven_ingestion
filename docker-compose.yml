@@ -80,6 +80,7 @@ services:
       - ./src:/app/src
       - ./tests:/app/tests
       - ./deps:/app/deps
+      - ./sftp_data:/app/sftp_data
     environment:
       - DB_PASSWORD=mysecretpassword
       - AWS_ACCESS_KEY_ID=minioadmin

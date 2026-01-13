@@ -1,69 +1,58 @@
 import os
 import json
 from airflow import DAG
-from airflow.operators.bash import BashOperator
+from airflow.providers.docker.operators.docker import DockerOperator
 from datetime import datetime, timedelta
 
-CONFIG_PATH = "/opt/airflow/configs"
+CONFIG_DIR = "/opt/airflow/configs"
 
-def create_dag(dag_id, config_filename):
-    default_args = {
-        "owner": "mouse",
-        "start_date": datetime(2025, 1, 1),
-        "retries": 1,
-        "retry_delay": timedelta(minutes=5),
-    }
-    
-    schedule_mapping = {
-        "mongo_logs.json": "0 * * * *",
-        "postgres.json": "20 * * * *",
-        "sftp.json": "40 * * * *",
-        "WikiAPI.json": "@daily"
-    }
-
-    schedule = schedule_mapping.get(config_filename, "@daily")
-
+def create_dag(dag_id, schedule, default_args, config_file, catchup=False):
     dag = DAG(
         dag_id=dag_id,
-        default_args=default_args,
         schedule_interval=schedule,
-        catchup=False,
-        max_active_runs=1,
-        tags=["metadata-driven"]
+        default_args=default_args,
+        catchup=catchup,
+        start_date=default_args.get('start_date', datetime(2025, 1, 1)),
+        tags=['MIND', 'Ingestion']
     )
 
     with dag:
-        path_mapping = {
-            "mongo_logs.json": "mongo_orders",
-            "sftp.json": "sftp_csv_data",
-            "postgres.json": "users_delta_table",
-            "WikiAPI.json": "wikipedia_search"
-        }
-        
-        folder_name = path_mapping.get(config_filename, config_filename.replace(".json", ""))
-        target_path = f"s3a://raw-data/{folder_name}"
-
-        ingest_task = BashOperator(
-            task_id="run_spark_ingestion",
-            bash_command=(
-                f"docker exec my_ingestion_app python -m src.main "
-                f"--config configs/{config_filename}"
-            )
+        run_ingestion = DockerOperator(
+            task_id=f"run_{dag_id}",
+            image="data-ingestion-framework-ingestion_app",
+            api_version='auto',
+            auto_remove=True,
+            command=f"python -m src.main --config configs/{config_file}",
+            docker_url="unix://var/run/docker.sock",
+            network_mode="data-ingestion-framework_default",
+            environment={
+                "DB_PASSWORD": "{{ var.value.db_password }}",
+                "AWS_ACCESS_KEY_ID": "minioadmin",
+                "AWS_SECRET_ACCESS_KEY": "minioadmin"
+            }
         )
-
-        validate_task = BashOperator(
-            task_id="validate_data_count",
-            bash_command=(
-                f"docker exec my_ingestion_app python -m tests.check {target_path}"
-            )
-        )
-
-        ingest_task >> validate_task
-        
     return dag
 
-if os.path.exists(CONFIG_PATH):
-    for file in os.listdir(CONFIG_PATH):
-        if file.endswith(".json"):
-            dag_name = f"ingestion_{file.split('.')[0]}"
-            globals()[dag_name] = create_dag(dag_name, file)
+if os.path.exists(CONFIG_DIR):
+    for file_name in os.listdir(CONFIG_DIR):
+        if file_name.endswith(".json"):
+            file_path = os.path.join(CONFIG_DIR, file_name)
+            
+            with open(file_path, "r") as f:
+                config = json.load(f)
+                
+                job_name = config.get("job_name")
+                dag_params = config.get("dag_params", {})
+                
+                dag_id = f"ingestion_{job_name}"
+                
+                schedule = dag_params.get("schedule_interval")
+                catchup = dag_params.get("catchup", False)
+                
+                default_args = {
+                    "owner": dag_params.get("owner", "data_engine"),
+                    "retries": dag_params.get("retries", 1),
+                    "retry_delay": timedelta(minutes=dag_params.get("retry_delay_min", 5)),
+                    "start_date": datetime.strptime(dag_params.get("start_date", "2025-01-01"), "%Y-%m-%d")
+                }
+                globals()[dag_id] = create_dag(dag_id, schedule, default_args, file_name, catchup)

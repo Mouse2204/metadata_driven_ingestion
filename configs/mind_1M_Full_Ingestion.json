@@ -1,0 +1,20 @@
+{
+  "job_name": "1M_Full_Ingestion",
+  "source_type": "sftp",
+  "ingest_method": "paramiko",
+  "ingestion_type": "full",
+  "incremental_column": "id",
+  "last_ingestion_value": "0",
+  "source_config": {
+    "host": "sftp_server",
+    "port": 22,
+    "username": "user",
+    "password": "pass",
+    "file_path": "upload/bench_1000000.csv"
+  },
+  "target": {
+    "format": "delta",
+    "path": "s3a://raw-data/1M_Full_Ingestion",
+    "primary_key": "id"
+  }
+}

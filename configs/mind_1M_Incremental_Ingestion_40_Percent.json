@@ -1,0 +1,20 @@
+{
+  "job_name": "1M_Incremental_Ingestion_40_Percent",
+  "source_type": "sftp",
+  "ingest_method": "paramiko",
+  "ingestion_type": "incremental",
+  "incremental_column": "id",
+  "last_ingestion_value": "599999",
+  "source_config": {
+    "host": "sftp_server",
+    "port": 22,
+    "username": "user",
+    "password": "pass",
+    "file_path": "upload/bench_1000000.csv"
+  },
+  "target": {
+    "format": "delta",
+    "path": "s3a://raw-data/1M_Incremental_Ingestion_40_Percent",
+    "primary_key": "id"
+  }
+}

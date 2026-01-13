@@ -1,0 +1,18 @@
+{
+  "job_name": "bench_100000_addFile",
+  "source_type": "sftp",
+  "ingest_method": "addFile",
+  "ingestion_type": "full",
+  "source_config": {
+    "host": "sftp_server",
+    "port": 22,
+    "username": "user",
+    "password": "pass",
+    "file_path": "sftp_data/bench_100000.csv"
+  },
+  "target": {
+    "format": "delta",
+    "path": "s3a://raw-data/bench_100000_addFile",
+    "primary_key": "id"
+  }
+}

@@ -1,22 +1,26 @@
 {
-  "job_name": "Twitter_Cursor_Ingest",
+  "job_name": "twitter_ingest_optimized",
   "source_type": "api",
+  "ingestion_type": "incremental",
+  "incremental_column": "id",
+  "last_ingestion_value": "0",
+  "batch_size": 100,
+  "ingestion_status": "active",
   "source_config": {
     "url": "https://api.twitter.com/2/tweets/search/recent",
     "method": "GET",
-    "headers": {
-      "Authorization": "Bearer ${TWITTER_TOKEN}"
-    },
-    "params": {
-      "query": "DataEngineering",
-      "max_results": 100
+    "headers": { "Authorization": "Bearer ${TWITTER_TOKEN}" },
+    "params": { 
+      "query": "DataEngineering", 
+      "max_results": 100,
+      "tweet.fields": "created_at,author_id"
     },
     "data_path": "data",
     "pagination": {
-      "strategy": "cursor",
-      "cursor_param": "next_token",
+      "strategy": "cursor", 
+      "cursor_param": "next_token", 
       "cursor_path": "meta.next_token",
-      "max_pages": 50,
+      "max_pages": 50, 
       "sleep_time": 1
     }
   },
@@ -25,8 +29,17 @@
     "mode": "append",
     "path": "s3a://raw-data/tweets",
     "primary_key": "id",
+    "schema_evolution": "merge",
     "transformations": [
       { "type": "add_ingestion_timestamp" }
     ]
+  },
+  "dag_params": {
+    "schedule_interval": "@daily",
+    "owner": "data_engine",
+    "retries": 1,
+    "retry_delay_min": 5,
+    "start_date": "2025-01-01",
+    "catchup": false
   }
 }

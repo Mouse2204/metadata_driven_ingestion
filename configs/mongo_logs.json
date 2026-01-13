@@ -1,19 +1,33 @@
 {
-  "job_name": "ingest_mongo_orders",
+  "job_name": "mongo_orders_optimized",
   "source_type": "mongo",
+  "ingestion_type": "incremental",
+  "incremental_column": "updated_at",
+  "last_ingestion_value": "2026-01-01 00:00:00",
+  "batch_size": 50000,
+  "ingestion_status": "active",
   "source_config": {
     "connection_uri": "mongodb://admin:password123@mongo_db:27017",
     "database": "sales_db",
     "collection": "orders"
   },
-"target": {
+  "target": {
     "format": "delta",
     "path": "s3a://raw-data/mongo_orders",
     "primary_key": "_id",
+    "schema_evolution": "merge",
     "transformations": [
       { "type": "upper_case", "columns": ["status"] },
       { "type": "add_ingestion_timestamp" },
       { "type": "cast_type", "columns": ["amount"], "data_type": "double" }
     ]
+  },
+  "dag_params": {
+    "schedule_interval": "0 * * * *",
+    "owner": "data_engine",
+    "retries": 1,
+    "retry_delay_min": 5,
+    "start_date": "2025-01-01",
+    "catchup": false
   }
 }
