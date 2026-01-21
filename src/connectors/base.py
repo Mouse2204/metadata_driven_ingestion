@@ -72,12 +72,19 @@ class BaseConnector(ABC):
         fmt = target.get("format", "delta").lower()
         path = target.get("path")
         pk = primary_key or target.get("primary_key")
-        
-        if pk and pk in df.columns:
-            df = df.dropDuplicates([pk])
-        
+        partition_cols = target.get("partition_by", [])
+
         df = self.apply_transformations(df)
         
+        if "_ingested_at" in df.columns:
+            df = df.withColumn("_ingest_date", F.to_date("_ingested_at"))
+            if "_ingest_date" not in partition_cols:
+                partition_cols.append("_ingest_date")
+
+        writer = df.write.format(fmt).mode(target.get("mode", "append")).option("mergeSchema", "true")
+        if partition_cols:
+            writer = writer.partitionBy(partition_cols)
+
         if fmt == "delta" and pk:
             if DeltaTable.isDeltaTable(self.spark, path):
                 dt = DeltaTable.forPath(self.spark, path)
@@ -85,9 +92,9 @@ class BaseConnector(ABC):
                 dt.alias("t").merge(df.alias("s"), f"t.{pk} = s.{pk}") \
                   .whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
             else:
-                df.write.format("delta").mode("overwrite").option("mergeSchema", "true").save(path)
+                writer.mode("overwrite").save(path)
         else:
-            df.write.format(fmt).mode(target.get("mode", "append")).save(path)
+            writer.save(path)
 
     def _save_audit_log(self, status, sc=0, tc=0, start=None, err=""):
         audit_path = "s3a://delta-lake/ingestion_audit_logs"

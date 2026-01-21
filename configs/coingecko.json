@@ -1,0 +1,22 @@
+{
+  "job_name": "coingecko_ingest",
+  "source_type": "api",
+  "source_config": {
+    "verify_ssl": false,
+    "url": "https://api.coingecko.com/api/v3/coins/markets",
+    "params": { "vs_currency": "usd", "per_page": 50 },
+    "data_path": "",
+    "pagination": {
+      "strategy": "page",
+      "page_param": "page",
+      "start_page": 1,
+      "max_pages": 3,
+      "sleep_time": 2
+    }
+  },
+  "target": {
+    "format": "delta",
+    "mode": "overwrite",
+    "path": "s3a://raw-data/coingecko_markets"
+  }
+}

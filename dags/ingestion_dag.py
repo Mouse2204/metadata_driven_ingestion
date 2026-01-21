@@ -13,11 +13,10 @@ def create_dag(dag_id, schedule, default_args, config_file, catchup=False):
         default_args=default_args,
         catchup=catchup,
         start_date=default_args.get('start_date', datetime(2025, 1, 1)),
-        tags=['MIND', 'Ingestion']
+        tags=['BecaData', 'Ingestion']
     )
-
     with dag:
-        run_ingestion = DockerOperator(
+        DockerOperator(
             task_id=f"run_{dag_id}",
             image="data-ingestion-framework-ingestion_app",
             api_version='auto',
@@ -27,6 +26,8 @@ def create_dag(dag_id, schedule, default_args, config_file, catchup=False):
             network_mode="data-ingestion-framework_default",
             environment={
                 "DB_PASSWORD": "{{ var.value.db_password }}",
+                "REDDIT_TOKEN": "{{ var.value.reddit_token }}",
+                "GITHUB_TOKEN": "{{ var.value.github_token }}",
                 "AWS_ACCESS_KEY_ID": "minioadmin",
                 "AWS_SECRET_ACCESS_KEY": "minioadmin"
             }
@@ -36,23 +37,14 @@ def create_dag(dag_id, schedule, default_args, config_file, catchup=False):
 if os.path.exists(CONFIG_DIR):
     for file_name in os.listdir(CONFIG_DIR):
         if file_name.endswith(".json"):
-            file_path = os.path.join(CONFIG_DIR, file_name)
-            
-            with open(file_path, "r") as f:
+            with open(os.path.join(CONFIG_DIR, file_name), "r") as f:
                 config = json.load(f)
-                
-                job_name = config.get("job_name")
                 dag_params = config.get("dag_params", {})
-                
-                dag_id = f"ingestion_{job_name}"
-                
-                schedule = dag_params.get("schedule_interval")
-                catchup = dag_params.get("catchup", False)
-                
+                dag_id = f"ingestion_{config.get('job_name')}"
                 default_args = {
                     "owner": dag_params.get("owner", "data_engine"),
                     "retries": dag_params.get("retries", 1),
                     "retry_delay": timedelta(minutes=dag_params.get("retry_delay_min", 5)),
                     "start_date": datetime.strptime(dag_params.get("start_date", "2025-01-01"), "%Y-%m-%d")
                 }
-                globals()[dag_id] = create_dag(dag_id, schedule, default_args, file_name, catchup)
+                globals()[dag_id] = create_dag(dag_id, dag_params.get("schedule_interval"), default_args, file_name, dag_params.get("catchup", False))

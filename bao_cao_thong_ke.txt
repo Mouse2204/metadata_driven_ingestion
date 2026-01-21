@@ -1,0 +1,36 @@
+============================================================
+BÁO CÁO THỐNG KÊ HIỆU SUẤT
+============================================================
+
+Thông số: Source_count = 250
+------------------------------------------------------------
+
+1. THỐNG KÊ TRUNG BÌNH:
+   • Full:
+     - Thời gian: 5.090 giây
+     - Duration: 49.207 giây
+
+   • Incremental:
+     - Thời gian: 4.840 giây
+     - Duration: 51.683 giây
+
+2. SO SÁNH HIỆU SUẤT:
+   • Thời gian: Full chậm hơn Incremental 0.250 giây
+   • Duration: Full thấp hơn Incremental 2.477 giây
+
+3. DỮ LIỆU CHI TIẾT:
+   • Full:
+     Test 1: Thời gian=5.430s, Duration=46.019s
+     Test 2: Thời gian=4.890s, Duration=51.078s
+     Test 3: Thời gian=4.950s, Duration=50.523s
+
+   • Incremental:
+     Test 1: Thời gian=4.900s, Duration=51.067s
+     Test 2: Thời gian=4.900s, Duration=51.000s
+     Test 3: Thời gian=4.720s, Duration=52.983s
+
+============================================================
+KẾT LUẬN:
+- Incremental có thời gian nhanh hơn 0.250 giây (4.9%)
+- Chênh lệch duration: 2.477 giây (5.0%)
+============================================================

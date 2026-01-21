@@ -1,0 +1,22 @@
+{
+  "job_name": "github_events_ingest",
+  "source_type": "api",
+  "source_config": {
+    "verify_ssl": false,
+    "url": "https://api.github.com/events",
+    "headers": {
+      "User-Agent": "BecaData-Framework/1.0"
+    },
+    "auth": {
+      "type": "token",
+      "token_env_var": "GITHUB_TOKEN"
+    },
+    "data_path": ""
+  },
+  "target": {
+    "format": "delta",
+    "mode": "append",
+    "path": "s3a://raw-data/github_events",
+    "primary_key": "id"
+  }
+}

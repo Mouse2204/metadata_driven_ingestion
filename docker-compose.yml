@@ -82,6 +82,8 @@ services:
       - ./deps:/app/deps
       - ./sftp_data:/app/sftp_data
     environment:
+      # - REQUESTS_CA_BUNDLE=/usr/local/lib/python3.10/site-packages/certifi/cacert.pem
+      # - SSL_CERT_FILE=/usr/local/lib/python3.10/site-packages/certifi/cacert.pem
       - DB_PASSWORD=mysecretpassword
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
