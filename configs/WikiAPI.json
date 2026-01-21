@@ -1,21 +1,31 @@
 {
-  "job_name": "wiki_api_optimized",
+  "job_name": "wiki_search_ingest_optimized",
   "source_type": "api",
-  "ingestion_type": "full",
+  "ingestion_type": "incremental",
+  "incremental_column": "pageid",
   "batch_size": 50,
   "ingestion_status": "active",
   "source_config": {
+    "verify_ssl": false,
     "url": "https://en.wikipedia.org/w/api.php",
     "method": "GET",
-    "headers": { "User-Agent": "MyDataPipeline/1.0" },
+    "headers": { 
+      "User-Agent": "BecaData-WikiPipeline/1.0 (contact: mouse_data_eng)" 
+    },
     "params": {
-      "action": "query", "format": "json", "list": "search", 
-      "srsearch": "Data Engineering", "srlimit": "50"
+      "action": "query",
+      "format": "json",
+      "list": "search", 
+      "srsearch": "Data Engineering", 
+      "srlimit": "50"
     },
     "data_path": "query.search",
     "pagination": {
-      "strategy": "cursor", "cursor_param": "continue", "cursor_path": "continue",
-      "max_pages": 5, "sleep_time": 1
+      "strategy": "cursor", 
+      "cursor_param": "continue", 
+      "cursor_path": "continue",
+      "max_pages": 10, 
+      "sleep_time": 1
     }
   },
   "target": {
@@ -23,6 +33,7 @@
     "mode": "append", 
     "path": "s3a://raw-data/wikipedia_search",
     "primary_key": "pageid",
+    "partition_by": ["_ingest_date"],
     "schema_evolution": "merge",
     "transformations": [
       { "type": "add_ingestion_timestamp" }

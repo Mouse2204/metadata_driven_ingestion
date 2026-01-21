@@ -1,22 +1,50 @@
 {
-  "job_name": "github_events_ingest",
+  "job_name": "github_events_ingest_optimized",
   "source_type": "api",
+  "ingestion_type": "incremental",
+  "incremental_column": "id",
+  "batch_size": 100,
+  "ingestion_status": "active",
   "source_config": {
     "verify_ssl": false,
     "url": "https://api.github.com/events",
+    "method": "GET",
     "headers": {
-      "User-Agent": "BecaData-Framework/1.0"
+      "User-Agent": "BecaData-GithubPipeline/1.0"
     },
     "auth": {
       "type": "token",
       "token_env_var": "GITHUB_TOKEN"
     },
-    "data_path": ""
+    "params": {
+      "per_page": 100
+    },
+    "data_path": "",
+    "pagination": {
+      "strategy": "page",
+      "page_param": "page",
+      "start_page": 1,
+      "max_pages": 30,
+      "sleep_time": 1
+    }
   },
   "target": {
     "format": "delta",
     "mode": "append",
     "path": "s3a://raw-data/github_events",
-    "primary_key": "id"
+    "primary_key": "id",
+    "partition_by": ["_ingest_date"],
+    "schema_evolution": "merge",
+    "transformations": [
+      { "type": "add_ingestion_timestamp" }
+    ]
+  },
+  "dag_params": {
+    "schedule_interval": "*/30 * * * *",
+    "owner": "data_engine",
+    "retries": 3,
+    "retry_delay_min": 5,
+    "start_date": "2025-01-01",
+    "catchup": false
   }
 }

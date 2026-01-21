@@ -1,22 +1,48 @@
 {
-  "job_name": "coingecko_ingest",
+  "job_name": "coingecko_markets_ingest_optimized",
   "source_type": "api",
+  "ingestion_type": "full",
+  "batch_size": 50,
+  "ingestion_status": "active",
   "source_config": {
     "verify_ssl": false,
     "url": "https://api.coingecko.com/api/v3/coins/markets",
-    "params": { "vs_currency": "usd", "per_page": 50 },
+    "method": "GET",
+    "headers": {
+      "User-Agent": "BecaData-CryptoPipeline/1.0"
+    },
+    "params": { 
+      "vs_currency": "usd", 
+      "per_page": 50,
+      "order": "market_cap_desc"
+    },
     "data_path": "",
     "pagination": {
       "strategy": "page",
       "page_param": "page",
       "start_page": 1,
-      "max_pages": 3,
+      "max_pages": 5,
       "sleep_time": 2
     }
   },
   "target": {
     "format": "delta",
-    "mode": "overwrite",
-    "path": "s3a://raw-data/coingecko_markets"
+    "mode": "append",
+    "path": "s3a://raw-data/coingecko_markets",
+    "primary_key": "id",
+    "partition_by": ["_ingest_date"],
+    "schema_evolution": "merge",
+    "transformations": [
+      { "type": "add_ingestion_timestamp" },
+      { "type": "cast_type", "columns": ["current_price", "market_cap"], "data_type": "double" }
+    ]
+  },
+  "dag_params": {
+    "schedule_interval": "0 * * * *",
+    "owner": "data_engine",
+    "retries": 2,
+    "retry_delay_min": 10,
+    "start_date": "2025-01-01",
+    "catchup": false
   }
 }
