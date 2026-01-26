@@ -8,7 +8,6 @@ try:
     df = spark.read.format("delta").load(path)
     print(f"Tổng số bản ghi GitHub: {df.count()}")
     
-    # Hiển thị các sự kiện mới nhất
     df.select("id", "type", "actor.display_login", "repo.name", "_ingested_at") \
       .orderBy("_ingested_at", ascending=False) \
       .show(10, truncate=False)

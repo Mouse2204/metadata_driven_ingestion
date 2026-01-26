@@ -60,12 +60,17 @@ class BaseConnector(ABC):
 
     def validate(self, source_df: DataFrame, target_path: str) -> dict:
         sc = source_df.count()
+        if sc <= 1: 
+            return {"sc": sc, "tc": 0, "status": "FAILED"}
+            
         try:
             tdf = self.spark.read.format("delta").load(target_path)
             tc = tdf.filter(F.col("_ingestion_id") == self.ingestion_id).count()
         except:
             tc = 0
-        return {"sc": sc, "tc": tc, "status": "SUCCESS" if sc == tc else "FAILED"}
+            
+        status = "SUCCESS" if (sc == tc and sc > 1) else "FAILED"
+        return {"sc": sc, "tc": tc, "status": status}
 
     def write(self, df: DataFrame, primary_key: str = None):
         target = self.target_config
@@ -116,7 +121,14 @@ class BaseConnector(ABC):
             df = self.read()
             self.write(df)
             res = self.validate(df, self.target_config.get("path"))
-            self._save_audit_log("SUCCESS", res["sc"], res["tc"], start)
+            
+            if res["status"] == "SUCCESS":
+                path = self.target_config.get("path")
+                self.logger.info(f"-> Đang tối ưu hóa bảng Delta tại: {path}")
+                self.spark.sql(f"OPTIMIZE delta.`{path}`")
+                self.spark.sql(f"VACUUM delta.`{path}` RETAIN 168 HOURS")
+            
+            self._save_audit_log(res["status"], res["sc"], res["tc"], start)
         except Exception as e:
             self.logger.error(f"Job Failed: {str(e)}")
             self._save_audit_log("FAILED", 0, 0, start, str(e))

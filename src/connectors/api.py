@@ -5,7 +5,9 @@ import os
 import shutil
 import certifi
 import urllib3
-from concurrent.futures import ThreadPoolExecutor
+import boto3
+from botocore.client import Config
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from pyspark.sql import functions as F
@@ -32,11 +34,8 @@ class ApiConnector(BaseConnector):
                 headers["X-API-Key"] = token
 
         session.headers.update(headers)
-        verify_ssl = source.get("verify_ssl", True)
-        session.verify = certifi.where() if verify_ssl else False
-        if not verify_ssl:
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-            
+        session.verify = certifi.where() 
+        
         retries = Retry(total=5, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
         session.mount('https://', HTTPAdapter(max_retries=retries))
         return session
@@ -50,7 +49,7 @@ class ApiConnector(BaseConnector):
                 return None
         return data
 
-    def _fetch_page(self, session, url, params, staging_path, page_idx):
+    def _fetch_page(self, session, url, params, s3_client, s3_bucket, s3_prefix, page_idx):
         try:
             response = session.get(url, params=params, timeout=60)
             response.raise_for_status()
@@ -58,13 +57,14 @@ class ApiConnector(BaseConnector):
             records = self._get_nested_value(json_data, self.source_config.get("data_path", ""))
             
             if records:
-                batch_file = os.path.join(staging_path, f"page_{page_idx}.json")
-                with open(batch_file, "w") as f:
-                    json.dump(records if isinstance(records, list) else [records], f)
+                key = f"{s3_prefix}/page_{page_idx}.json"
+                content = json.dumps(records if isinstance(records, list) else [records])
+                s3_client.put_object(Bucket=s3_bucket, Key=key, Body=content)
                 return True
+            return False
         except Exception as e:
-            self.logger.error(f"Lỗi nạp trang {page_idx}: {e}")
-        return False
+            self.logger.error(f"Lỗi nạp trang {page_idx}: {str(e)}")
+            return e 
 
     def read(self):
         source = self.source_config
@@ -73,18 +73,32 @@ class ApiConnector(BaseConnector):
         strategy = pagination.get("strategy", "single").lower()
         max_pages = pagination.get("max_pages", 1)
         
-        staging_path = f"/tmp/ingestion_{self.job_name}_{self.ingestion_id}"
-        os.makedirs(staging_path, exist_ok=True)
-        session = self._get_session()
+        s3_bucket = "raw-data"
+        s3_prefix = f"staging/{self.job_name}/{self.ingestion_id}"
+        s3_client = boto3.client(
+            's3',
+            endpoint_url=os.getenv("S3_ENDPOINT", "http://minio:9000"),
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "minioadmin"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+            config=Config(signature_version='s3v4')
+        )
 
-        self.logger.info(f"-> Bắt đầu nạp dữ liệu (Strategy: {strategy})")
+        session = self._get_session()
+        self.logger.info(f"-> [GĐ 2] Nạp dữ liệu lên S3 Staging: s3://{s3_bucket}/{s3_prefix}")
 
         if strategy == "page":
+            futures = []
             with ThreadPoolExecutor(max_workers=5) as executor:
                 for i in range(max_pages):
                     params = source.get("params", {}).copy()
                     params[pagination.get("page_param", "page")] = pagination.get("start_page", 1) + i
-                    executor.submit(self._fetch_page, session, url, params, staging_path, i)
+                    futures.append(executor.submit(self._fetch_page, session, url, params, s3_client, s3_bucket, s3_prefix, i))
+            
+            for future in as_completed(futures):
+                result = future.result()
+                if isinstance(result, Exception) or result is False:
+                    raise RuntimeError(f"Data Integrity Risk: Lỗi nạp trang API: {result}")
+
         else:
             current_cursor = None
             for i in range(max_pages):
@@ -92,36 +106,55 @@ class ApiConnector(BaseConnector):
                 if strategy == "cursor" and current_cursor:
                     params[pagination.get("cursor_param")] = current_cursor
                 
-                response = session.get(url, params=params, timeout=60)
-                response.raise_for_status()
-                json_data = response.json()
-                
-                records = self._get_nested_value(json_data, source.get("data_path", ""))
-                if not records: break
-                
-                with open(os.path.join(staging_path, f"page_{i}.json"), "w") as f:
-                    json.dump(records if isinstance(records, list) else [records], f)
-                
-                current_cursor = self._get_nested_value(json_data, pagination.get("cursor_path", ""))
-                if not current_cursor: break
-                if pagination.get("sleep_time", 0) > 0: time.sleep(pagination.get("sleep_time"))
+                try:
+                    response = session.get(url, params=params, timeout=60)
+                    response.raise_for_status() 
+                    json_data = response.json()
+                    records = self._get_nested_value(json_data, source.get("data_path", ""))
+                    
+                    if not records and i == 0:
+                        raise ValueError(f"Không tìm thấy dữ liệu tại '{source.get('data_path')}'. URL hoặc Metadata bị sai.")
+                    
+                    if not records: break
+                    
+                    key = f"{s3_prefix}/page_{i}.json"
+                    content = json.dumps(records if isinstance(records, list) else [records])
+                    s3_client.put_object(Bucket=s3_bucket, Key=key, Body=content)
+                    
+                    current_cursor = self._get_nested_value(json_data, pagination.get("cursor_path", ""))
+                    if not current_cursor: break
+                    if pagination.get("sleep_time", 0) > 0: time.sleep(pagination.get("sleep_time"))
+                except Exception as e:
+                    raise RuntimeError(f"Hệ thống dừng nạp do lỗi: {str(e)}")
 
-        if not os.path.exists(staging_path) or not os.listdir(staging_path):
-            return self.spark.createDataFrame([], schema="string")
-            
-        df = self.spark.read.json(staging_path)
+        check_objs = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=s3_prefix)
+        if check_objs.get('KeyCount', 0) == 0:
+            raise RuntimeError("Không có dữ liệu staging trên S3.")
+
+        df = self.spark.read.json(f"s3a://{s3_bucket}/{s3_prefix}")
+        
+        required_col = source.get("data_path", "").split('.')[0]
+        if required_col not in df.columns or df.count() <= 1:
+            raise RuntimeError(f"Dữ liệu không đúng cấu trúc hoặc rỗng. Thiếu cột: {required_col}")
         
         pk = self.target_config.get("primary_key")
         if pk and "." in pk:
             new_pk_name = pk.replace(".", "_")
             df = df.withColumn(new_pk_name, F.col(pk))
             self.target_config["primary_key"] = new_pk_name
-            self.logger.info(f"-> Đã phẳng hóa khóa chính: {pk} -> {new_pk_name}")
             
         return df
 
     def cleanup(self):
-        staging_path = f"/tmp/ingestion_{self.job_name}_{self.ingestion_id}"
-        if os.path.exists(staging_path):
-            shutil.rmtree(staging_path)
-            self.logger.info(f"-> Đã dọn dẹp thư mục tạm: {staging_path}")
+        s3_bucket = "raw-data"
+        s3_prefix = f"staging/{self.job_name}/{self.ingestion_id}"
+        s3_client = boto3.client(
+            's3',
+            endpoint_url=os.getenv("S3_ENDPOINT", "http://minio:9000"),
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "minioadmin"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "minioadmin")
+        )
+        objs = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=s3_prefix)
+        if 'Contents' in objs:
+            keys = [{'Key': obj['Key']} for obj in objs['Contents']]
+            s3_client.delete_objects(Bucket=s3_bucket, Delete={'Objects': keys})

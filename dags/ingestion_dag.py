@@ -22,7 +22,6 @@ def create_dag(dag_id, schedule, default_args, config_file, catchup=False):
             api_version='auto',
             auto_remove=True,
             command=f"python -m src.main --config configs/{config_file}",
-            docker_url="unix://var/run/docker.sock",
             network_mode="data-ingestion-framework_default",
             environment={
                 "DB_PASSWORD": "{{ var.value.db_password }}",
