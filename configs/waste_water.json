@@ -1,0 +1,27 @@
+{
+  "job_name": "waste_water_events_v2",
+  "source_type": "api",
+  "ingestion_type": "incremental",
+  "source_config": {
+    "verify_ssl": false,
+    "url": "http://192.168.255.204:8070/api/Events",
+    "method": "GET",
+    "params": {
+      "PageSize": 10
+    },
+    "data_path": "result.data",
+    "pagination": {
+      "strategy": "page",
+      "page_param": "PageIndex",
+      "start_page": 1,
+      "max_pages": 325
+    }
+  },
+  "target": {
+    "format": "delta",
+    "mode": "append",
+    "path": "s3a://raw-data/waste_water_events_v2",
+    "primary_key": "id",
+    "partition_by": ["_ingest_date"]
+  }
+}

@@ -1,14 +1,14 @@
 version: '3.8'
 
 services:
-  # --- DATABASE (Dùng chung cho Airflow và App) ---
+  # --- DATABASE ---
   postgres_db:
     image: postgres:15
     container_name: my_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: mysecretpassword
-      POSTGRES_DB: airflow_db  # Để Airflow khởi tạo trực tiếp vào đây
+      POSTGRES_DB: airflow_db
     ports:
       - "5432:5432"
     volumes:
@@ -72,6 +72,7 @@ services:
     container_name: my_ingestion_app
     tty: true
     stdin_open: true
+    network_mode: "host" # Cho phép container "ké" VPN từ Windows
     depends_on:
       - postgres_db
       - minio
@@ -82,12 +83,13 @@ services:
       - ./deps:/app/deps
       - ./sftp_data:/app/sftp_data
     environment:
-      # - REQUESTS_CA_BUNDLE=/usr/local/lib/python3.10/site-packages/certifi/cacert.pem
-      # - SSL_CERT_FILE=/usr/local/lib/python3.10/site-packages/certifi/cacert.pem
       - DB_PASSWORD=mysecretpassword
       - AWS_ACCESS_KEY_ID=minioadmin
       - AWS_SECRET_ACCESS_KEY=minioadmin
-      - S3_ENDPOINT=http://minio:9000
+      # QUAN TRỌNG: Dùng 127.0.0.1 thay vì 'minio' vì đang chạy network_mode host
+      - S3_ENDPOINT=http://127.0.0.1:9000 
+      - POSTGRES_HOST=127.0.0.1
+      - POSTGRES_PORT=5432
     command: tail -f /dev/null
 
   # --- AIRFLOW COMPONENTS ---
@@ -105,11 +107,11 @@ services:
       - ./dags:/opt/airflow/dags
       - ./configs:/opt/airflow/configs
       - ./logs:/opt/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "8085:8080"
     command: webserver
 
-  # --- AIRFLOW SCHEDULER ---
   airflow-scheduler:
     user: "0:0"
     build:
@@ -124,6 +126,7 @@ services:
       - ./dags:/opt/airflow/dags
       - ./configs:/opt/airflow/configs
       - ./logs:/opt/airflow/logs
+      - /var/run/docker.sock:/var/run/docker.sock
     command: scheduler
 
   airflow-init:

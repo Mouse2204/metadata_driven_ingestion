@@ -21,12 +21,14 @@ def create_dag(dag_id, schedule, default_args, config_file, catchup=False):
             image="data-ingestion-framework-ingestion_app",
             api_version='auto',
             auto_remove=True,
+            mount_tmp_dir=False,
             command=f"python -m src.main --config configs/{config_file}",
             network_mode="data-ingestion-framework_default",
             environment={
                 "DB_PASSWORD": "{{ var.value.db_password }}",
                 "REDDIT_TOKEN": "{{ var.value.reddit_token }}",
                 "GITHUB_TOKEN": "{{ var.value.github_token }}",
+                "WASTE_WATER_TOKEN": "{{ var.value.waste_water_token }}",
                 "AWS_ACCESS_KEY_ID": "minioadmin",
                 "AWS_SECRET_ACCESS_KEY": "minioadmin"
             }

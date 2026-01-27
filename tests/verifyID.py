@@ -1,19 +1,22 @@
-from pyspark.sql import functions as F
 from src.utils.spark import get_spark_session
+from pyspark.sql import functions as F
 
 def verify_data_integrity():
     spark = get_spark_session("DataIntegrityCheck")
-    path = "s3a://raw-data/reddit_posts"
-    pk_col = "data_id"
+    path = "s3a://raw-data/waste_water_events_v2"
+    
+    pk_col = "id" 
 
     print("\n" + "="*60)
     print(f"KIỂM TRA TÍNH TOÀN VẸN DỮ LIỆU: {path}")
     print("="*60)
 
     try:
+        # Đọc dữ liệu từ Delta Lake
         df = spark.read.format("delta").load(path)
         total_count = df.count()
         
+        # Tìm các bản ghi bị trùng lặp dựa trên khóa chính
         duplicates = df.groupBy(pk_col).count().filter("count > 1")
         duplicate_count = duplicates.count()
 

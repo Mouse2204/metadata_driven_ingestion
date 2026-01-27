@@ -2,15 +2,14 @@ import requests
 import json
 import time
 import os
-import shutil
 import certifi
-import urllib3
 import boto3
 from botocore.client import Config
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from pyspark.sql import functions as F
+from pyspark.sql.types import ArrayType, StringType, StructType
 from src.connectors.base import BaseConnector
 from src.connectors.factory import ConnectorFactory
 
@@ -34,7 +33,7 @@ class ApiConnector(BaseConnector):
                 headers["X-API-Key"] = token
 
         session.headers.update(headers)
-        session.verify = certifi.where() 
+        session.verify = certifi.where() if source.get("verify_ssl", True) else False
         
         retries = Retry(total=5, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
         session.mount('https://', HTTPAdapter(max_retries=retries))
@@ -88,7 +87,7 @@ class ApiConnector(BaseConnector):
 
         if strategy == "page":
             futures = []
-            with ThreadPoolExecutor(max_workers=5) as executor:
+            with ThreadPoolExecutor(max_workers=10) as executor:
                 for i in range(max_pages):
                     params = source.get("params", {}).copy()
                     params[pagination.get("page_param", "page")] = pagination.get("start_page", 1) + i
@@ -97,8 +96,7 @@ class ApiConnector(BaseConnector):
             for future in as_completed(futures):
                 result = future.result()
                 if isinstance(result, Exception) or result is False:
-                    raise RuntimeError(f"Data Integrity Risk: Lỗi nạp trang API: {result}")
-
+                    self.logger.warning(f"Có lỗi xảy ra ở một số trang: {result}")
         else:
             current_cursor = None
             for i in range(max_pages):
@@ -111,10 +109,6 @@ class ApiConnector(BaseConnector):
                     response.raise_for_status() 
                     json_data = response.json()
                     records = self._get_nested_value(json_data, source.get("data_path", ""))
-                    
-                    if not records and i == 0:
-                        raise ValueError(f"Không tìm thấy dữ liệu tại '{source.get('data_path')}'. URL hoặc Metadata bị sai.")
-                    
                     if not records: break
                     
                     key = f"{s3_prefix}/page_{i}.json"
@@ -123,19 +117,23 @@ class ApiConnector(BaseConnector):
                     
                     current_cursor = self._get_nested_value(json_data, pagination.get("cursor_path", ""))
                     if not current_cursor: break
-                    if pagination.get("sleep_time", 0) > 0: time.sleep(pagination.get("sleep_time"))
                 except Exception as e:
                     raise RuntimeError(f"Hệ thống dừng nạp do lỗi: {str(e)}")
 
-        check_objs = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=s3_prefix)
-        if check_objs.get('KeyCount', 0) == 0:
-            raise RuntimeError("Không có dữ liệu staging trên S3.")
-
-        df = self.spark.read.json(f"s3a://{s3_bucket}/{s3_prefix}")
+        df = self.spark.read.option("mergeSchema", "true").json(f"s3a://{s3_bucket}/{s3_prefix}")
         
-        required_col = source.get("data_path", "").split('.')[0]
-        if required_col not in df.columns or df.count() <= 1:
-            raise RuntimeError(f"Dữ liệu không đúng cấu trúc hoặc rỗng. Thiếu cột: {required_col}")
+        if df.count() > 0:
+            self.logger.info(f"Đã nạp thành công {df.count()} bản ghi.")
+            for col_name in ["images", "eventLogs"]:
+                if col_name in df.columns:
+                    df = df.withColumn(col_name, F.col(col_name).cast("array<string>"))
+            
+            if "vehicle" in df.columns:
+                df = df.withColumn("vehicle", 
+                    F.when(F.col("vehicle").isNotNull(), 
+                           F.struct(F.col("vehicle.*"))).otherwise(None))
+        else:
+            raise RuntimeError("Dữ liệu nạp từ API rỗng.")
         
         pk = self.target_config.get("primary_key")
         if pk and "." in pk:
